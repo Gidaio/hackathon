@@ -32,13 +32,28 @@ interface MySpaces {
 const input: Input = JSON.parse(readFileSync("input.json", "utf8"))
 input.size = 5
 
+solveMaze(input)
+
 function solveMaze(input: Input) {
   const startingPoints = input.spaces.length
 
-  const visitedSpaces = []
+  const visitedSpaces: MySpaces[] = [
+    { ...getSpaceByCoords(input.spaces, parseStringCoords(input.start)), pointsRemaining: startingPoints }
+  ]
 }
 
 
-function getSpaceByCoords(spaces: InputSpace[], coords: string): InputSpace {
+function parseStringCoords(coords: string): number[] {
+  const coordParts = coords.split(",")
+  return coordParts.map(coord => {
+    const sanitizedCoord = coord.replace(/\(|\)/g, "")
+    return Number(sanitizedCoord)
+  })
+}
 
+
+function getSpaceByCoords(spaces: InputSpace[], coords: number[]): InputSpace {
+  const index = coords[0] * 625 + coords[1] * 125 + coords[2] * 25 + coords[3] * 5 + coords[4]
+
+  return spaces[index]
 }
