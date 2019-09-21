@@ -29,6 +29,7 @@ interface SpaceWithPoints {
   moves: string
   pointsRemaining: number
   movesMade: string[]
+  prizesPickedUp: string[]
 }
 
 type Space = InputSpace | SpaceWithPoints
@@ -46,7 +47,8 @@ function solveMaze(input: Input) {
     {
       ...input.spaces[getIndexByCoords(parseStringCoords(input.start))],
       pointsRemaining: startingPoints,
-      movesMade: []
+      movesMade: [],
+      prizesPickedUp: []
     }
   ]
   const visitedSpaces: SpaceWithPoints[] = []
@@ -70,12 +72,14 @@ function solveMaze(input: Input) {
       const potentialSpace = {
         ...input.spaces[getIndexByCoords(getCoords(potentialCoords))],
         movesMade: [...spaceToVisit.movesMade, direction],
-        pointsRemaining: spaceToVisit.pointsRemaining - 1
+        pointsRemaining: spaceToVisit.pointsRemaining - 1,
+        prizesPickedUp: [...spaceToVisit.prizesPickedUp]
       }
 
-      if (buildStringCoords(potentialSpace) === input.end) {
-        console.log(`Found route: ${potentialSpace.movesMade.join("")}. Have ${potentialSpace.pointsRemaining} points left.`)
-        continue
+      if (input.prizes[buildStringCoords(potentialSpace)] && !potentialSpace.prizesPickedUp.includes(buildStringCoords(potentialSpace))) {
+        potentialSpace.pointsRemaining += input.prizes[buildStringCoords(potentialSpace)]
+        // delete input.prizes[buildStringCoords(potentialSpace)]
+        potentialSpace.prizesPickedUp.push(buildStringCoords(potentialSpace))
       }
 
       // If we've already visited the space
@@ -96,6 +100,10 @@ function solveMaze(input: Input) {
         } else {
           spacesToVisit.push(potentialSpace)
         }
+      }
+
+      if (buildStringCoords(potentialSpace) === input.end) {
+        console.log(`Found route: ${potentialSpace.movesMade.join("")}. Have ${potentialSpace.pointsRemaining} points left.`)
       }
     }
 
