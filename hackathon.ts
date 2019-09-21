@@ -28,6 +28,7 @@ interface SpaceWithPoints {
   w: number
   moves: string
   pointsRemaining: number
+  movesMade: string[]
 }
 
 type Space = InputSpace | SpaceWithPoints
@@ -42,7 +43,11 @@ function solveMaze(input: Input) {
   const startingPoints = input.spaces.length
 
   const spacesToVisit: SpaceWithPoints[] = [
-    { ...input.spaces[getIndexByCoords(parseStringCoords(input.start))], pointsRemaining: startingPoints }
+    {
+      ...input.spaces[getIndexByCoords(parseStringCoords(input.start))],
+      pointsRemaining: startingPoints,
+      movesMade: []
+    }
   ]
   const visitedSpaces: SpaceWithPoints[] = []
 
@@ -53,11 +58,24 @@ function solveMaze(input: Input) {
     const directions = spaceToVisit.moves.split("") as Dimension[]
 
     for (const direction of directions) {
-      let potentialSpace = { ...spaceToVisit, pointsRemaining: spaceToVisit.pointsRemaining - 1 }
+      let potentialCoords = {
+        ...spaceToVisit,
+      }
       if (input.dimensions.includes(direction)) {
-        potentialSpace[direction]--
+        potentialCoords[direction]--
       } else {
-        potentialSpace[direction.toLowerCase() as Dimension]++
+        potentialCoords[direction.toLowerCase() as Dimension]++
+      }
+
+      const potentialSpace = {
+        ...input.spaces[getIndexByCoords(getCoords(potentialCoords))],
+        movesMade: [...spaceToVisit.movesMade, direction],
+        pointsRemaining: spaceToVisit.pointsRemaining - 1
+      }
+
+      if (buildStringCoords(potentialSpace) === input.end) {
+        console.log(`Found route: ${potentialSpace.movesMade.join("")}. Have ${potentialSpace.pointsRemaining} points left.`)
+        continue
       }
 
       // If we've already visited the space
@@ -80,11 +98,13 @@ function solveMaze(input: Input) {
         }
       }
     }
+
+    visitedSpaces.push(spaceToVisit)
   }
 }
 
 
-function buildCoords(space: Space): number[] {
+function getCoords(space: Space): number[] {
   return [space.x, space.y, space.z, space.v, space.w]
 }
 
@@ -95,6 +115,10 @@ function parseStringCoords(coords: string): number[] {
     const sanitizedCoord = coord.replace(/\(|\)/g, "")
     return Number(sanitizedCoord)
   })
+}
+
+function buildStringCoords(space: Space): string {
+  return `(${space.x},${space.y},${space.z},${space.v},${space.w})`
 }
 
 
