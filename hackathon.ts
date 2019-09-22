@@ -1,145 +1,89 @@
 import { readFileSync } from "fs"
 
-type Dimension = "x" | "y" | "z" | "v" | "w"
-
 interface Input {
   dimensions: string[]
   size: number
-  spaces: InputSpace[]
   start: string
   end: string
-  prizes: { [location: string]: number }
+  spaces: any[]
 }
 
-interface InputSpace {
-  x: number
-  y: number
-  z: number
-  v: number
-  w: number
-  moves: string
-}
-
-interface SpaceWithPoints {
-  x: number
-  y: number
-  z: number
-  v: number
-  w: number
-  moves: string
+interface DjikstraSpace {
+  coords: number[]
+  moves: string[]
   pointsRemaining: number
-  movesMade: string[]
-  prizesPickedUp: string[]
+  previousSpace: { space: DjikstraSpace, direction: string } | null
 }
 
-type Space = InputSpace | SpaceWithPoints
 
+const testInput = JSON.parse(readFileSync("test-input.json", "utf8")) as Input
 
-const input: Input = JSON.parse(readFileSync("input.json", "utf8"))
-input.size = 5
+console.log(solveMaze(testInput))
 
-solveMaze(input)
-
-function solveMaze(input: Input) {
-  const startingPoints = input.spaces.length
-
-  const spacesToVisit: SpaceWithPoints[] = [
-    {
-      ...input.spaces[getIndexByCoords(parseStringCoords(input.start))],
-      pointsRemaining: startingPoints,
-      movesMade: [],
-      prizesPickedUp: []
-    }
-  ]
-  const visitedSpaces: SpaceWithPoints[] = []
-
-  while (spacesToVisit.length) {
-    spacesToVisit.sort((a, b) => b.pointsRemaining - a.pointsRemaining)
-    const spaceToVisit = spacesToVisit.shift()!
-
-    const directions = spaceToVisit.moves.split("") as Dimension[]
-
-    for (const direction of directions) {
-      let potentialCoords = {
-        ...spaceToVisit,
-      }
-      if (input.dimensions.includes(direction)) {
-        potentialCoords[direction]--
-      } else {
-        potentialCoords[direction.toLowerCase() as Dimension]++
-      }
-
-      const potentialSpace = {
-        ...input.spaces[getIndexByCoords(getCoords(potentialCoords))],
-        movesMade: [...spaceToVisit.movesMade, direction],
-        pointsRemaining: spaceToVisit.pointsRemaining - 1,
-        prizesPickedUp: [...spaceToVisit.prizesPickedUp]
-      }
-
-      if (input.prizes[buildStringCoords(potentialSpace)] && !potentialSpace.prizesPickedUp.includes(buildStringCoords(potentialSpace))) {
-        potentialSpace.pointsRemaining += input.prizes[buildStringCoords(potentialSpace)]
-        // delete input.prizes[buildStringCoords(potentialSpace)]
-        potentialSpace.prizesPickedUp.push(buildStringCoords(potentialSpace))
-      }
-
-      // If we've already visited the space
-      const previouslyVisitedSpaceIndex = visitedSpaces.findIndex(isSameSpace(potentialSpace))
-      if (previouslyVisitedSpaceIndex !== -1) {
-        // If we got to it faster, remove it from the visited list and add it to the to visit list.
-        if (visitedSpaces[previouslyVisitedSpaceIndex].pointsRemaining < potentialSpace.pointsRemaining) {
-          visitedSpaces.splice(previouslyVisitedSpaceIndex, 1)
-          spacesToVisit.push(potentialSpace)
-        }
-        // Otherwise, ignore this.
-      } else {
-        // If we haven't visited the space.
-        const toVisitSpaceIndex = spacesToVisit.findIndex(isSameSpace(potentialSpace))
-        if (toVisitSpaceIndex !== -1) {
-          // If it's in the to visit list, keep the higher score.
-          spacesToVisit[toVisitSpaceIndex].pointsRemaining = Math.max(spacesToVisit[toVisitSpaceIndex].pointsRemaining, potentialSpace.pointsRemaining)
-        } else {
-          spacesToVisit.push(potentialSpace)
-        }
-      }
-
-      if (buildStringCoords(potentialSpace) === input.end) {
-        console.log(`Found route: ${potentialSpace.movesMade.join("")}. Have ${potentialSpace.pointsRemaining} points left.`)
-      }
+function solveMaze(input: Input): string {
+  const djikstraSpaces = input.spaces.map(space => {
+    const out: DjikstraSpace = {
+      coords: input.dimensions.map(dimension => space[dimension]),
+      moves: space.moves.split(""),
+      pointsRemaining: 0,
+      previousSpace: null
     }
 
-    visitedSpaces.push(spaceToVisit)
-  }
-}
+    if (buildCoordsString(out.coords) === input.start) {
+      out.pointsRemaining = input.spaces.length
+    }
 
-
-function getCoords(space: Space): number[] {
-  return [space.x, space.y, space.z, space.v, space.w]
-}
-
-
-function parseStringCoords(coords: string): number[] {
-  const coordParts = coords.split(",")
-  return coordParts.map(coord => {
-    const sanitizedCoord = coord.replace(/\(|\)/g, "")
-    return Number(sanitizedCoord)
+    return out
   })
+
+  const unvisitedSpaces = [...djikstraSpaces]
+
+  while (unvisitedSpaces.length) {
+    const currentSpace = unvisitedSpaces.sort((a, b) => b.pointsRemaining - a.pointsRemaining).shift()!
+
+    if (buildCoordsString(currentSpace.coords) === input.end) {
+      const path: string[] = []
+      for (let space = currentSpace; !!space.previousSpace; space = space.previousSpace!.space) {
+        path.unshift(space.previousSpace!.direction)
+      }
+
+      return `${path.join("")}: ${currentSpace.pointsRemaining}`
+    }
+
+    for (const direction of currentSpace.moves) {
+      const neighborCoords = [...currentSpace.coords]
+      if (input.dimensions.includes(direction)) {
+        neighborCoords[input.dimensions.indexOf(direction)]--
+      } else {
+        neighborCoords[input.dimensions.indexOf(direction.toLowerCase())]++
+      }
+
+      const neighborSpace = djikstraSpaces[getIndex(neighborCoords, input.size)]
+      if (currentSpace.pointsRemaining - 1 > neighborSpace.pointsRemaining) {
+        neighborSpace.pointsRemaining = currentSpace.pointsRemaining - 1
+        neighborSpace.previousSpace = { space: currentSpace, direction  }
+      }
+    }
+
+    let dummy = 0
+  }
+
+  return "no path"
 }
 
-function buildStringCoords(space: Space): string {
-  return `(${space.x},${space.y},${space.z},${space.v},${space.w})`
+
+function buildCoordsString(coords: number[]): string {
+  return `(${coords.join(",")})`
 }
 
 
-function isSameSpace(space: Space) {
-  return (candidateSpace: Space) =>
-    candidateSpace.x === space.x &&
-    candidateSpace.y === space.y &&
-    candidateSpace.z === space.z &&
-    candidateSpace.v === space.v &&
-    candidateSpace.w === space.w
-}
+function getIndex(coords: number[], size: number): number {
+  let index = 0
+  let multiplier = 1
+  for (let i = coords.length - 1; i >= 0; i--) {
+    index += coords[i] * multiplier
+    multiplier *= size
+  }
 
-
-function getIndexByCoords(coords: number[]): number {
-  return coords[0] * 625 + coords[1] * 125 + coords[2] * 25 + coords[3] * 5 + coords[4]
+  return index
 }
