@@ -6,17 +6,21 @@ interface Input {
   start: string
   end: string
   spaces: any[]
+  prizes: {
+    [coords: string]: number
+  }
 }
 
 interface DjikstraSpace {
   coords: number[]
   moves: string[]
   pointsRemaining: number
-  previousSpace: { space: DjikstraSpace, direction: string } | null
+  path: string[]
+  prizesCollected: string[]
 }
 
 
-const testInput = JSON.parse(readFileSync("test-input.json", "utf8")) as Input
+const testInput = JSON.parse(readFileSync("input.json", "utf8")) as Input
 
 console.log(solveMaze(testInput))
 
@@ -26,7 +30,8 @@ function solveMaze(input: Input): string {
       coords: input.dimensions.map(dimension => space[dimension]),
       moves: space.moves.split(""),
       pointsRemaining: 0,
-      previousSpace: null
+      path: [],
+      prizesCollected: []
     }
 
     if (buildCoordsString(out.coords) === input.start) {
@@ -42,12 +47,8 @@ function solveMaze(input: Input): string {
     const currentSpace = unvisitedSpaces.sort((a, b) => b.pointsRemaining - a.pointsRemaining).shift()!
 
     if (buildCoordsString(currentSpace.coords) === input.end) {
-      const path: string[] = []
-      for (let space = currentSpace; !!space.previousSpace; space = space.previousSpace!.space) {
-        path.unshift(space.previousSpace!.direction)
-      }
-
-      return `${path.join("")}: ${currentSpace.pointsRemaining}`
+      console.log("Points remaining:", currentSpace.pointsRemaining)
+      return currentSpace.path.join("")
     }
 
     for (const direction of currentSpace.moves) {
@@ -59,9 +60,23 @@ function solveMaze(input: Input): string {
       }
 
       const neighborSpace = djikstraSpaces[getIndex(neighborCoords, input.size)]
-      if (currentSpace.pointsRemaining - 1 > neighborSpace.pointsRemaining) {
-        neighborSpace.pointsRemaining = currentSpace.pointsRemaining - 1
-        neighborSpace.previousSpace = { space: currentSpace, direction  }
+
+      let prizeBonus = 0
+      if (input.prizes[buildCoordsString(neighborSpace.coords)] && !neighborSpace.prizesCollected.includes(buildCoordsString(neighborSpace.coords))) {
+        prizeBonus = input.prizes[buildCoordsString(neighborSpace.coords)]
+      }
+
+      if (currentSpace.pointsRemaining - 1 + prizeBonus > neighborSpace.pointsRemaining) {
+        neighborSpace.pointsRemaining = currentSpace.pointsRemaining - 1 + prizeBonus
+        neighborSpace.path = [...currentSpace.path, direction]
+
+        if (prizeBonus) {
+          neighborSpace.prizesCollected.push(buildCoordsString(neighborSpace.coords))
+        }
+
+        if (unvisitedSpaces.findIndex(space => buildCoordsString(space.coords) === buildCoordsString(neighborSpace.coords)) === -1) {
+          unvisitedSpaces.push(neighborSpace)
+        }
       }
     }
 
