@@ -11,12 +11,17 @@ interface Input {
   }
 }
 
-interface DjikstraSpace {
+interface Node {
   coords: number[]
   moves: string[]
   pointsRemaining: number
   path: string[]
-  prizesCollected: string[]
+  prizesCollected: Prize[]
+}
+
+interface Prize {
+  coords: number[]
+  value: number
 }
 
 
@@ -25,80 +30,126 @@ const testInput = JSON.parse(readFileSync("input.json", "utf8")) as Input
 console.log(solveMaze(testInput))
 
 function solveMaze(input: Input): string {
-  const djikstraSpaces = input.spaces.map(space => {
-    const out: DjikstraSpace = {
-      coords: input.dimensions.map(dimension => space[dimension]),
-      moves: space.moves.split(""),
-      pointsRemaining: 0,
-      path: [],
-      prizesCollected: []
-    }
+  const index = buildIndexer(input.size)
 
-    if (buildCoordsString(out.coords) === input.start) {
-      out.pointsRemaining = input.spaces.length
-    }
-
-    return out
-  })
-
-  const unvisitedSpaces = [...djikstraSpaces]
-
-  while (unvisitedSpaces.length) {
-    const currentSpace = unvisitedSpaces.sort((a, b) => b.pointsRemaining - a.pointsRemaining).shift()!
-
-    if (buildCoordsString(currentSpace.coords) === input.end) {
-      console.log("Points remaining:", currentSpace.pointsRemaining)
-      return currentSpace.path.join("")
-    }
-
-    for (const direction of currentSpace.moves) {
-      const neighborCoords = [...currentSpace.coords]
-      if (input.dimensions.includes(direction)) {
-        neighborCoords[input.dimensions.indexOf(direction)]--
-      } else {
-        neighborCoords[input.dimensions.indexOf(direction.toLowerCase())]++
+  const map: Node[] = []
+  for (const space of input.spaces) {
+    const coords = input.dimensions.map(dimension => space[dimension])
+    if (!map[index(coords)]) {
+      map[index(coords)] = {
+        coords,
+        moves: space.moves,
+        pointsRemaining: 0,
+        path: [],
+        prizesCollected: []
       }
-
-      const neighborSpace = djikstraSpaces[getIndex(neighborCoords, input.size)]
-
-      let prizeBonus = 0
-      if (input.prizes[buildCoordsString(neighborSpace.coords)] && !neighborSpace.prizesCollected.includes(buildCoordsString(neighborSpace.coords))) {
-        prizeBonus = input.prizes[buildCoordsString(neighborSpace.coords)]
-      }
-
-      if (currentSpace.pointsRemaining - 1 + prizeBonus > neighborSpace.pointsRemaining) {
-        neighborSpace.pointsRemaining = currentSpace.pointsRemaining - 1 + prizeBonus
-        neighborSpace.path = [...currentSpace.path, direction]
-
-        if (prizeBonus) {
-          neighborSpace.prizesCollected.push(buildCoordsString(neighborSpace.coords))
-        }
-
-        if (unvisitedSpaces.findIndex(space => buildCoordsString(space.coords) === buildCoordsString(neighborSpace.coords)) === -1) {
-          unvisitedSpaces.push(neighborSpace)
-        }
-      }
+    } else {
+      throw new Error(`${space.x}, ${space.y} already exists!`)
     }
-
-    let dummy = 0
   }
 
-  return "no path"
+  const startCoords = parseStringCoords(input.start)
+  map[index(startCoords)].pointsRemaining = input.spaces.length
+
+  const prizes: Prize[] = []
+  for (const prizeCoord in input.prizes) {
+    const coords = parseStringCoords(prizeCoord)
+    prizes[index(coords)] = {
+      coords,
+      value: input.prizes[prizeCoord]
+    }
+  }
+
+  const queue: Node[] = [map[index(startCoords)]]
+
+  while (queue.length) {
+    // printMap(map, input.size)
+    queue.sort((a, b) => b.pointsRemaining - a.pointsRemaining)
+    const currentNode = queue.shift()!
+
+    for (let i = 0; i < input.dimensions.length; i++) {
+      if (currentNode.moves.includes(input.dimensions[i])) {
+        const prospectiveCoords = [...currentNode.coords]
+        prospectiveCoords[i]--
+        const prospectiveNode = map[index(prospectiveCoords)]
+
+        let newPointsRemaining = currentNode.pointsRemaining - 1
+
+        let hasPrize = false
+        const prize = prizes[index(prospectiveCoords)]
+        if (prize && !prospectiveNode.prizesCollected.includes(prize)) {
+          newPointsRemaining += prize.value
+          hasPrize = true
+        }
+
+        if (prospectiveNode.pointsRemaining < newPointsRemaining) {
+          prospectiveNode.pointsRemaining = newPointsRemaining
+          prospectiveNode.path = currentNode.path.concat(input.dimensions[i])
+          if (hasPrize) {
+            prospectiveNode.prizesCollected.push(prize)
+          }
+          if (!queue.includes(prospectiveNode)) {
+            queue.push(prospectiveNode)
+          }
+        }
+      }
+
+      if (currentNode.moves.includes(input.dimensions[i].toUpperCase())) {
+        const prospectiveCoords = [...currentNode.coords]
+        prospectiveCoords[i]++
+        const prospectiveNode = map[index(prospectiveCoords)]
+
+        let newPointsRemaining = currentNode.pointsRemaining - 1
+
+        let hasPrize = false
+        const prize = prizes[index(prospectiveCoords)]
+        if (prize && !prospectiveNode.prizesCollected.includes(prize)) {
+          newPointsRemaining += prize.value
+          hasPrize = true
+        }
+
+        if (prospectiveNode.pointsRemaining < newPointsRemaining) {
+          prospectiveNode.pointsRemaining = newPointsRemaining
+          prospectiveNode.path = currentNode.path.concat(input.dimensions[i].toUpperCase())
+          if (hasPrize) {
+            prospectiveNode.prizesCollected.push(prize)
+          }
+          if (!queue.includes(prospectiveNode)) {
+            queue.push(prospectiveNode)
+          }
+        }
+      }
+    }
+  }
+
+  const endCoords = parseStringCoords(input.end)
+  const endNode = map[index(endCoords)]
+
+  return `${endNode.path.join("")}: ${endNode.pointsRemaining}`
 }
 
 
-function buildCoordsString(coords: number[]): string {
-  return `(${coords.join(",")})`
+function buildIndexer(size: number): (coords: number[]) => number {
+  return (coords: number[]) => coords.reduce((result, coord, index) => result + coord * size ** index, 0)
 }
 
 
-function getIndex(coords: number[], size: number): number {
-  let index = 0
-  let multiplier = 1
-  for (let i = coords.length - 1; i >= 0; i--) {
-    index += coords[i] * multiplier
-    multiplier *= size
+function parseStringCoords(coords: string): number[] {
+  const noParens = coords.replace(/\(|\)/g, "")
+  const split = noParens.split(",")
+  const numbers = split.map(coord => Number(coord))
+  return numbers
+}
+
+
+function printMap(map: Node[], size: number): void {
+  const width = map.length.toString(10).length
+  const out: string[] = []
+
+  for (let i = 0; i < map.length; i += size) {
+    const row = map.slice(i, i + size)
+    out.push(row.map(node => node.pointsRemaining.toString(10).padStart(width)).join(" "))
   }
 
-  return index
+  console.debug(out.join("\n"))
 }
